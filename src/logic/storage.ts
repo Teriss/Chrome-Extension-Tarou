@@ -1,12 +1,13 @@
 import type { DropInfo } from 'api'
 import type { BattleExport, BattleInfo } from 'battle'
-import type { ArtifactRule, ArtifactUsage, BattleMemo, BattleRecord, CombatPanelSetting, DailyCost, DisplayItem, EventInfo, GachaInfo, GachaRecord, MarkedUser, NotificationSetting, Quest, QuestSetting, RecoveryItem, SampoInfo, SampoSetup, SkipQuest, UserInfo, Widget } from 'extension'
+import type { ArtifactRule, ArtifactUsage, BattleMemo, BattleRecord, CombatPanelSetting, DailyCost, DisplayItem, EventInfo, GachaInfo, GachaRecord, MarkedUser, MaterialInfo, NotificationSetting, Quest, QuestSetting, RecoveryItem, SampoInfo, SampoSetup, SkipQuest, UserInfo, Widget } from 'extension'
 import type { BuildLeaderAbility, BuildNpc, Deck } from 'party'
 import type { Artifact, CalculateSetting } from 'source'
 import dayjs from 'dayjs'
 import { useWebExtensionStorage } from '~/composables/useWebExtensionStorage'
 import { defaultCombatPanelSetting, defaultNotificationItem, defaultNotificationSetting, defaultWidget } from '~/constants'
 import { defaultArtifactRuleList } from '~/constants/artifact'
+import { defaultEvokerInfo, defaultXenoGauge } from '~/constants/evoker'
 
 // Debugger
 export const code = useWebExtensionStorage<string>('code', '')
@@ -31,6 +32,11 @@ export const widgetList = useWebExtensionStorage<Widget[]>('widgetList', default
 export const skipQuest = useWebExtensionStorage<SkipQuest>('skipQuest', { updateTime: 0, list: [] })
 export const sampoInfo = useWebExtensionStorage<Partial<SampoInfo>>('sampoInfo', {})
 export const sampoSetup = useWebExtensionStorage<Partial<SampoSetup>>('sampoSetup', {})
+
+// Evoker
+export const materialInfo = useWebExtensionStorage<MaterialInfo[]>('materialInfo', [])
+export const evokerInfo = useWebExtensionStorage('evokerInfo', defaultEvokerInfo)
+export const xenoGauge = useWebExtensionStorage('xenoGauge', defaultXenoGauge)
 
 // BattleLog
 export const battleInfo = useWebExtensionStorage<Partial<BattleInfo>>('battleInfo', {})

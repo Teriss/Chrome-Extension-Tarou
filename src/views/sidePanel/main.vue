@@ -30,6 +30,7 @@ const upViewList = computed(() => [
   { key: 'history', label: '战斗记录', icon: 'game-icons:scroll-unfurled' },
   { key: 'patient', label: '标记玩家', icon: 'material-symbols:patient-list' },
   { key: 'gacha', label: '抽卡模拟', icon: 'game-icons:mimic-chest' },
+  { key: 'evoker', label: '贤者素材', icon: 'game-icons:magic-wand' },
   { key: 'battle', label: '接战', icon: 'game-icons:crossed-swords', hidden: !inBattle.value },
 ].filter(m => !m.hidden))
 

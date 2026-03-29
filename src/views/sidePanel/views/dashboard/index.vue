@@ -19,7 +19,7 @@ import Treasureraid from './event/Treasureraid.vue'
 
 const { updateInfo, checkForUpdates } = useVersionCheck()
 
-const componentMap: Record<string, Component> = {
+const componentMap: Record<string, Component>= {
   Status,
   StoneCount,
   TreasureMonitor,

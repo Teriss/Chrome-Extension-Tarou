@@ -42,8 +42,9 @@ function changeCode() {
         updateCode({ code: instance.inputValue }).then((data) => {
           code.value = data.code
           done()
-        }).catch(() => {
-          ElMessage.error('迁移失败')
+        }).catch((error) => {
+          console.error('迁移失败详情:', error)
+          ElMessage.error(`迁移失败: ${error.message || '未知错误'}`)
         }).finally(() => {
           instance.confirmButtonLoading = false
         })

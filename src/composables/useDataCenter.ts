@@ -6,7 +6,7 @@ import dayjs from 'dayjs'
 import { sendBossInfo } from '~/api'
 import { artifactSkillList } from '~/constants/artifact'
 import { getEventGachaBoxNum } from '~/constants/event'
-import { artifactList, artifactUsage, battleInfo, battleMemo, battleRecord, buildQuestId, dailyCost, displayList, eventList, gachaInfo, gachaRecord, jobAbilityList, localNpcList, notificationSetting, obTabId, recoveryItemList, sampoInfo, sampoSetup, skipQuest, userInfo } from '~/logic'
+import { artifactList, artifactUsage, battleInfo, battleMemo, battleRecord, buildQuestId, dailyCost, displayList, eventList, evokerInfo, gachaInfo, gachaRecord, jobAbilityList, localNpcList, materialInfo, notificationSetting, obTabId, recoveryItemList, sampoInfo, sampoSetup, skipQuest, userInfo, xenoGauge } from '~/logic'
 
 const MaxMemoLength = 50
 
@@ -16,7 +16,10 @@ export async function unpack(parcel: string) {
 
   const { url, requestData, responseData } = JSON.parse(parcel) as { url: string, requestData?: string, responseData?: any }
 
-  // console.log({ url, requestData, responseData })
+  // 调试日志
+  if (url.includes('/item/')) {
+    console.log('物品相关请求:', url)
+  }
 
   // Dashboard 处理活动信息展示
   processEventData(url, responseData)
@@ -445,6 +448,61 @@ export async function unpack(parcel: string) {
     recoveryItemList.value.unshift(res)
   }
 
+  // Evoker 素材数据 - 材料列表
+  if (url.includes('/item/article_list_by_filter_mode')) {
+    console.log('处理物品列表数据，数量:', responseData?.length)
+    console.log('第一个物品:', responseData?.[0])
+    materialInfo.value = responseData
+  }
+
+  // Evoker 素材数据 - 背包页面
+  if (url.includes('/item/list')) {
+    materialInfo.value = responseData.article_list
+  }
+
+  // Evoker 素材数据 - 物品列表（其他可能的路径）
+  if (url.includes('/item/content/list')) {
+    materialInfo.value = responseData.article_list
+  }
+
+  // Evoker 贤武数据
+  if (url.includes('/weapon/list')) {
+    const weaponList = responseData.list
+    weaponList.forEach((weapon: any) => {
+      const hitEvoker = evokerInfo.value.find(evoker => evoker.weaponId === Number(weapon.master.id))
+      if (hitEvoker)
+        hitEvoker.weaponLevel = Number(weapon.param.evolution) + 1
+    })
+  }
+
+  // Evoker 塔罗数据
+  if (url.includes('/summon/list')) {
+    const summonList = responseData.list
+    summonList.forEach((summon: any) => {
+      const hitEvoker = evokerInfo.value.find(evoker => evoker.summonId === Number(summon.master.id))
+      if (hitEvoker)
+        hitEvoker.tarotLevel = Number(summon.param.evolution) + 2
+    })
+  }
+
+  // Evoker 贤者数据
+  if (url.includes('/npc/list')) {
+    const npcList = responseData.list
+    npcList.forEach((npc: any) => {
+      const hitEvoker = evokerInfo.value.find(evoker => evoker.npcId === Number(npc.master.id))
+      if (hitEvoker)
+        hitEvoker.evokerLevel = Number(npc.param.evolution) + 1
+    })
+  }
+
+  // Evoker 领域数据
+  if (url.includes('/rest/npcevoker/evoker_list')) {
+    const data = responseData.evoker
+    const hitEvoker = evokerInfo.value.find(evoker => evoker.npcId === Number(data.param.npc_id))
+    if (hitEvoker)
+      hitEvoker.domainLevel = Number(data.param.evoker_lv)
+  }
+
   // Dashboard skip副本信息
   if (url.includes('/rest/quest/skip_quest_list')) {
     skipQuest.value.updateTime = Date.now()
@@ -459,12 +517,16 @@ export async function unpack(parcel: string) {
       }))
   }
 
-  // Party 角色数据
+  // Evoker 贤者四技能数据 & Party 角色数据
   if (/\/(?:party|npc)\/npc\//.test(url)) {
     const npcDetail = responseData
 
     if (!npcDetail.master?.id)
       return
+
+    const hitEvoker = evokerInfo.value.find(evoker => evoker.npcId === Number(npcDetail.master.id))
+    if (hitEvoker)
+      hitEvoker.isAbility4Release = !!(npcDetail.ability[4] && npcDetail.ability[4].quest?.is_clear)
 
     const npcInfo: BuildNpc = {
       paramId: npcDetail.id,
@@ -504,6 +566,19 @@ export async function unpack(parcel: string) {
       localNpcList.value[hitIndex] = { ...npcInfo, exlb: localNpcList.value[hitIndex].exlb }
 
     localNpcList.value = localNpcList.value.filter(n => !Object.hasOwn(n, 'id'))
+  }
+
+  // Evoker 获取沙盒4个六道boss进度条
+  if (url.includes('/rest/replicard/stage')) {
+    if ([6, 7, 8, 9].includes(Number(responseData.stage.stage_id))) {
+      for (const division of Object.values(responseData.map.division_list)) {
+        const hitQuest = (division as any).quest_list.find((quest: any) => xenoGauge.value.some(xeno => xeno.questId === quest.quest_id))
+        if (hitQuest) {
+          xenoGauge.value.find(xeno => xeno.questId === hitQuest.quest_id)!.gauge = hitQuest.xeno_sephira_gauge || 0
+          break
+        }
+      }
+    }
   }
 
   // Party 记录伤害计算设置
