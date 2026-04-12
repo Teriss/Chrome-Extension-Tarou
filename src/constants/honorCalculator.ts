@@ -45,43 +45,58 @@ const getHighLevelQuests = () => {
     .sort((a, b) => b.score - a.score)
 }
 
-// 计算撒币组合
+// 计算撒币组合（包含进本按自私黄技的情况）
 const calculateRupieCombination = (gap: number): RupieResult | null => {
-  const { entryBase, flip10k, flip3k, flip1k } = CONTRIBUTION_DATA.rupieAdjustment
+  const { entryBase, flip10k: score10k, flip3k: score3k, flip1k: score1k } = CONTRIBUTION_DATA.rupieAdjustment
   
-  // 撒币至少需要1分（进本基础分）
-  if (gap < entryBase) return null
-  
-  const remainingGap = gap - entryBase
-  
-  // 计算可能的撒币组合
   let bestResult: RupieResult | null = null
   let minOperations = Infinity
   
-  // 尝试不同数量的flip10k
-  for (let f10k = 0; f10k * flip10k <= remainingGap; f10k++) {
-    const remainingAfter10k = remainingGap - f10k * flip10k
+  // 遍历所有可能的进本次数（从 0 次到 gap 次）
+  for (let entryCount = 0; entryCount <= gap / entryBase; entryCount++) {
+    // 性能剪枝：如果当前纯进本次数已经超过了已知最小操作数，直接放弃后续遍历
+    if (entryCount >= minOperations) break
     
-    // 尝试不同数量的flip3k
-    for (let f3k = 0; f3k * flip3k <= remainingAfter10k; f3k++) {
-      const remainingAfter3k = remainingAfter10k - f3k * flip3k
+    const baseScore = entryCount * entryBase
+    const remainingGap = gap - baseScore
+    
+    // 情况A：完全只靠进本（0次撒币）
+    if (remainingGap === 0) {
+      if (entryCount < minOperations) {
+        minOperations = entryCount
+        bestResult = { entryBase: entryCount, flip10k: 0, flip3k: 0, flip1k: 0, totalScore: gap, operations: entryCount }
+      }
+      continue
+    }
+    
+    // 情况B：需要撒币（前提：必须至少进本1次才能撒币）
+    if (entryCount === 0) continue
+    
+    // 尝试用硬币填补剩余缺口
+    for (let f10k = 0; f10k * score10k <= remainingGap; f10k++) {
+      if (entryCount + f10k >= minOperations) break // 剪枝
       
-      // 计算需要的flip1k数量
-      const f1k = remainingAfter3k / flip1k
-      
-      if (Number.isInteger(f1k) && f1k >= 0) {
-        const totalScore = entryBase + f10k * flip10k + f3k * flip3k + f1k * flip1k
-        const operations = 1 + f10k + f3k + f1k // 1次进本 + 撒币次数
+      const remainingAfter10k = remainingGap - f10k * score10k
+      for (let f3k = 0; f3k * score3k <= remainingAfter10k; f3k++) {
+        if (entryCount + f10k + f3k >= minOperations) break // 剪枝
         
-        if (totalScore === gap && operations < minOperations) {
-          minOperations = operations
-          bestResult = {
-            entryBase: 1,
-            flip10k,
-            flip3k,
-            flip1k,
-            totalScore,
-            operations
+        const remainingAfter3k = remainingAfter10k - f3k * score3k
+        const f1k = remainingAfter3k / score1k
+        
+        if (Number.isInteger(f1k) && f1k >= 0) {
+          const totalScore = baseScore + f10k * score10k + f3k * score3k + f1k * score1k
+          const operations = entryCount + f10k + f3k + f1k // 总进本次数 + 撒币次数
+          
+          if (totalScore === gap && operations < minOperations) {
+            minOperations = operations
+            bestResult = {
+              entryBase: entryCount,
+              flip10k: f10k,
+              flip3k: f3k,
+              flip1k: f1k,
+              totalScore: gap, // 严谨校验：总分必定等于 gap
+              operations
+            }
           }
         }
       }
@@ -91,42 +106,41 @@ const calculateRupieCombination = (gap: number): RupieResult | null => {
   return bestResult
 }
 
-// 动态规划计算固定分数副本组合（优化版）
+// 贪心算法计算固定分数副本组合（完全贪心版）
 const calculateQuestCombination = (gap: number): QuestResult | null => {
   // 限制gap大小，防止内存溢出
-  if (gap > 10000000) { // 1000万
+  if (gap > 1000000) { // 100万
     return null
   }
   
   const fixedQuests = getFixedQuests()
+  let remainingGap = gap
+  const quests: Record<string, number> = {}
+  let totalOperations = 0
   
-  // 动态规划表，dp[i]表示达到分数i所需的最少操作次数
-  const dp = Array(gap + 1).fill(Infinity)
-  dp[0] = 0
-  
-  // 记录路径
-  const path: { [key: number]: { [questKey: string]: number } } = { 0: {} }
-  
-  // 遍历每个分数
-  for (let i = 0; i <= gap; i++) {
-    if (dp[i] === Infinity) continue
+  // 贪心算法：优先使用高分副本
+  for (const quest of fixedQuests) {
+    if (remainingGap <= 0) break
     
-    // 遍历每个副本
-    for (const quest of fixedQuests) {
-      const nextScore = i + quest.score
-      if (nextScore <= gap && dp[nextScore] > dp[i] + 1) {
-        dp[nextScore] = dp[i] + 1
-        // 复制当前路径并添加新的副本
-        path[nextScore] = { ...path[i] }
-        path[nextScore][quest.key] = (path[nextScore][quest.key] || 0) + 1
-      }
+    const count = Math.floor(remainingGap / quest.score)
+    if (count > 0) {
+      quests[quest.key] = count
+      totalOperations += count
+      remainingGap -= count * quest.score
     }
   }
   
-  if (dp[gap] === Infinity) return null
+  // 如果剩余分数为0，说明找到了解决方案
+  if (remainingGap === 0) {
+    return {
+      ...quests,
+      totalScore: gap,
+      operations: totalOperations
+    }
+  }
   
-  const result: QuestResult = { ...path[gap], totalScore: gap, operations: dp[gap] }
-  return result
+  // 贪心算法失败，返回null
+  return null
 }
 
 // 计算高级副本组合（优化版）
@@ -206,66 +220,112 @@ export function calculateFixScore(gap: number): FixScoreResult {
     }
   }
   
-  // 分差较小时，先用撒币法修个位数和十位数
+  // 完全贪心算法实现
   let bestResult: FixScoreResult | null = null
-  let minOperations = Infinity
   
-  // 尝试直接用撒币解决（当所有副本分数都大于gap时）
-  const rupieOnlyResult = calculateRupieCombination(gap)
-  if (rupieOnlyResult) {
+  // 先计算贪心副本组合，得到剩余分数
+  const fixedQuests = getFixedQuests()
+  let remainingGap = gap
+  const quests: Record<string, number> = {}
+  let totalOperations = 0
+  
+  for (const quest of fixedQuests) {
+    if (remainingGap <= 0) break
+    
+    const count = Math.floor(remainingGap / quest.score)
+    if (count > 0) {
+      quests[quest.key] = count
+      totalOperations += count
+      remainingGap -= count * quest.score
+    }
+  }
+  
+  // 尝试用撒币解决剩余分数
+  let rupieResult = calculateRupieCombination(remainingGap)
+  let finalRemainingGap = remainingGap
+  
+  if (rupieResult) {
+    // 撒币成功，计算总分
     bestResult = {
       gap,
       highLevelQuests: { totalScore: 0, operations: 0 },
-      rupie: rupieOnlyResult,
-      quests: { totalScore: 0, operations: 0 },
-      totalOperations: rupieOnlyResult.operations,
+      rupie: rupieResult,
+      quests: {
+        ...quests,
+        totalScore: gap - remainingGap,
+        operations: totalOperations
+      },
+      totalOperations: totalOperations + rupieResult.operations,
       isValid: true,
       suggestion: ''
     }
-    minOperations = rupieOnlyResult.operations
+  } else {
+    // 撒币失败，尝试用纯混分本（只丢黄技）解决
+    finalRemainingGap = remainingGap
+    const entryBase = CONTRIBUTION_DATA.rupieAdjustment.entryBase
+    const mixCount = finalRemainingGap / entryBase
+    
+    if (Number.isInteger(mixCount) && mixCount > 0) {
+      bestResult = {
+        gap,
+        highLevelQuests: { totalScore: 0, operations: 0 },
+        rupie: { 
+          entryBase: mixCount, 
+          flip10k: 0, 
+          flip3k: 0, 
+          flip1k: 0, 
+          totalScore: finalRemainingGap, 
+          operations: mixCount 
+        },
+        quests: {
+          ...quests,
+          totalScore: gap - finalRemainingGap,
+          operations: totalOperations
+        },
+        totalOperations: totalOperations + mixCount,
+        isValid: true,
+        suggestion: ''
+      }
+    }
   }
   
-  // 尝试撒币+副本组合
-  const maxRupieScore = Math.min(1000, gap)
+  // 尝试直接用撒币解决（当所有副本分数都大于gap时）
+  if (!bestResult) {
+    const rupieOnlyResult = calculateRupieCombination(gap)
+    if (rupieOnlyResult) {
+      bestResult = {
+        gap,
+        highLevelQuests: { totalScore: 0, operations: 0 },
+        rupie: rupieOnlyResult,
+        quests: { totalScore: 0, operations: 0 },
+        totalOperations: rupieOnlyResult.operations,
+        isValid: true,
+        suggestion: ''
+      }
+    }
+  }
   
-  for (let rupieScore = 0; rupieScore <= maxRupieScore; rupieScore++) {
-    // 跳过不可能的撒币分数
-    if (rupieScore > 0 && rupieScore < CONTRIBUTION_DATA.rupieAdjustment.entryBase) {
-      continue
-    }
+  // 尝试直接用纯混分本解决（当撒币也失败时）
+  if (!bestResult) {
+    const entryBase = CONTRIBUTION_DATA.rupieAdjustment.entryBase
+    const mixCount = gap / entryBase
     
-    const questScore = gap - rupieScore
-    
-    // 计算撒币组合
-    const rupieResult = rupieScore > 0 ? calculateRupieCombination(rupieScore) : { 
-      entryBase: 0, 
-      flip10k: 0, 
-      flip3k: 0, 
-      flip1k: 0, 
-      totalScore: 0, 
-      operations: 0 
-    }
-    
-    // 计算副本组合
-    const questResult = questScore > 0 ? calculateQuestCombination(questScore) : { 
-      totalScore: 0, 
-      operations: 0 
-    }
-    
-    if ((rupieScore === 0 || rupieResult) && (questScore === 0 || questResult)) {
-      const totalOperations = (rupieResult?.operations || 0) + (questResult?.operations || 0)
-      
-      if (totalOperations < minOperations) {
-        minOperations = totalOperations
-        bestResult = {
-          gap,
-          highLevelQuests: { totalScore: 0, operations: 0 },
-          rupie: rupieResult || { entryBase: 0, flip10k: 0, flip3k: 0, flip1k: 0, totalScore: 0, operations: 0 },
-          quests: questResult || { totalScore: 0, operations: 0 },
-          totalOperations,
-          isValid: true,
-          suggestion: ''
-        }
+    if (Number.isInteger(mixCount) && mixCount > 0) {
+      bestResult = {
+        gap,
+        highLevelQuests: { totalScore: 0, operations: 0 },
+        rupie: { 
+          entryBase: mixCount, 
+          flip10k: 0, 
+          flip3k: 0, 
+          flip1k: 0, 
+          totalScore: gap, 
+          operations: mixCount 
+        },
+        quests: { totalScore: 0, operations: 0 },
+        totalOperations: mixCount,
+        isValid: true,
+        suggestion: ''
       }
     }
   }
@@ -287,63 +347,89 @@ export function calculateFixScore(gap: number): FixScoreResult {
 
 // 格式化修分结果
 export function formatFixScoreResult(result: FixScoreResult): string {
-  let output = `目标缺口：${result.gap.toLocaleString()} 分\n`
-  
-  // 如果有建议，直接显示建议
+  // 如果有建议，直接显示建议（通常是分差太大无法穷举时的提示）
   if (result.suggestion) {
-    output += `\n${result.suggestion}`
-    return output
+    return `目标缺口：${result.gap.toLocaleString()} 分\n\n${result.suggestion}`
   }
+
+  let output = `目标缺口：${result.gap.toLocaleString()} 分\n\n`
   
-  // 高级副本部分
+  // 用于收集各个模块，方便后续按分数从高到低排序
+  const sections: { score: number; text: string }[] = []
+  
+  // 1. 高级副本部分
   if (result.highLevelQuests.totalScore > 0) {
-    output += '高级本：'
-    const questEntries = Object.entries(result.highLevelQuests).filter(([key]) => key !== 'totalScore' && key !== 'operations')
+    let text = `高级战斗本（共计 ${result.highLevelQuests.totalScore.toLocaleString()} 分）\n`
     const questNames = {
-      LV90: '90级',
-      LV95: '95级',
-      LV100: '100级',
-      LV150: '150级',
-      LV200: '200级',
-      LV250: '250级'
+      LV90: '90级', LV95: '95级', LV100: '100级',
+      LV150: '150级', LV200: '200级', LV250: '250级'
     }
-    
-    questEntries.forEach(([key, count], index) => {
-      if (index > 0) output += '，'
-      output += `${questNames[key as keyof typeof questNames]} 打 ${count} 次`
+    Object.entries(result.highLevelQuests).forEach(([key, count]) => {
+      if (key !== 'totalScore' && key !== 'operations' && count > 0) {
+        text += `  • ${questNames[key as keyof typeof questNames]}：打 ${count} 次\n`
+      }
     })
-    output += `（共计 ${result.highLevelQuests.totalScore.toLocaleString()} 分）\n`
+    sections.push({ score: result.highLevelQuests.totalScore, text })
   }
   
-  // 撒币部分
-  if (result.rupie.totalScore > 0) {
-    output += `撒币本：进本 ${result.rupie.entryBase} 次`
-    if (result.rupie.flip10k > 0) output += `，撒 1万 ${result.rupie.flip10k} 次`
-    if (result.rupie.flip3k > 0) output += `，撒 3千 ${result.rupie.flip3k} 次`
-    if (result.rupie.flip1k > 0) output += `，撒 1千 ${result.rupie.flip1k} 次`
-    output += `（共计 ${result.rupie.totalScore.toLocaleString()} 分）\n`
-  }
-  
-  // 副本部分
+  // 2. 常规战斗本部分
   if (result.quests.totalScore > 0) {
-    output += '战斗本：'
-    const questEntries = Object.entries(result.quests).filter(([key]) => key !== 'totalScore' && key !== 'operations')
+    let text = `常规战斗本（共计 ${result.quests.totalScore.toLocaleString()} 分）\n`
     const questNames = {
-      EX_PLUS: 'EX+',
-      EXTREME: '新牛',
-      VERY_HARD: '老牛',
-      HARD: '大眼',
-      NORMAL: '小眼'
+      EX_PLUS: 'EX+', EXTREME: '新牛', VERY_HARD: '老牛',
+      HARD: '大眼', NORMAL: '小眼'
     }
-    
-    questEntries.forEach(([key, count], index) => {
-      if (index > 0) output += '，'
-      output += `${questNames[key as keyof typeof questNames]} 打 ${count} 次`
+    Object.entries(result.quests).forEach(([key, count]) => {
+      if (key !== 'totalScore' && key !== 'operations' && count > 0) {
+        text += `  • ${questNames[key as keyof typeof questNames]}：打 ${count} 次\n`
+      }
     })
-    output += `（共计 ${result.quests.totalScore.toLocaleString()} 分）\n`
+    sections.push({ score: result.quests.totalScore, text })
   }
   
-  output += `总操作次数：${result.totalOperations} 次`
+  // 3. 撒币与纯混分本部分
+  if (result.rupie.totalScore > 0) {
+    const hasCoins = result.rupie.flip10k > 0 || result.rupie.flip3k > 0 || result.rupie.flip1k > 0
+    const pureEntriesCount = hasCoins ? result.rupie.entryBase - 1 : result.rupie.entryBase
+    
+    // 纯混分本模块
+    if (pureEntriesCount > 0) {
+      const pureScore = pureEntriesCount * CONTRIBUTION_DATA.rupieAdjustment.entryBase
+      let text = `混分（共计 ${pureScore.toLocaleString()} 分）\n`
+      text += `  • 进本丢自私黄技 ${pureEntriesCount} 次\n`
+      sections.push({ score: pureScore, text })
+    }
+    
+    // 撒币本模块
+    if (hasCoins) {
+      const rupieScore = 1 * CONTRIBUTION_DATA.rupieAdjustment.entryBase + 
+                         result.rupie.flip10k * 61 + 
+                         result.rupie.flip3k * 18 + 
+                         result.rupie.flip1k * 6
+      let text = `撒币本 (90hell)（共计 ${rupieScore.toLocaleString()} 分）\n`
+      text += `  • 进本：丢自私黄技 1 次\n`
+      
+      let coins = []
+      if (result.rupie.flip10k > 0) coins.push(`1万 × ${result.rupie.flip10k} 次`)
+      if (result.rupie.flip3k > 0) coins.push(`3千 × ${result.rupie.flip3k} 次`)
+      if (result.rupie.flip1k > 0) coins.push(`1千 × ${result.rupie.flip1k} 次`)
+      
+      text += `  • 撒币：${coins.join('，')}\n`
+      sections.push({ score: rupieScore, text })
+    }
+  }
+  
+  // 根据 score 从高到低对所有模块排序
+  sections.sort((a, b) => b.score - a.score)
+  
+  // 拼接排序后的模块
+  sections.forEach(sec => {
+    output += sec.text + '\n'
+  })
+  
+  output += `---\n`
+  output += `总操作次数：${result.totalOperations} 次\n`
+  output += `⚠️ 重要提示：务必先检查是否打了眼球 bjs 以及捐肉再修分`
   
   return output
 }
