@@ -173,16 +173,31 @@ function handleNormalAttackJson(data: AttackResultJson) {
   if (!scenario)
     return
 
-  battleInfo.value.normalAttackInfo = { hit: 0, ability: 0, special: 0, total: 0, chain: 0 }
+  battleInfo.value.normalAttackInfo = { hit: 0, ability: 0, special: 0, attack: 0, total: 0, chain: 0, playerDamage: [], playerAbilityDamage: [], playerSpecialDamage: [], playerAttackDamage: [] }
+  const playerDamageMap = new Map<number, number>()
+  const playerAbilityDamageMap = new Map<number, number>()
+  const playerSpecialDamageMap = new Map<number, number>()
+  const playerAttackDamageMap = new Map<number, number>()
+  
   for (let index = 0; index < scenario.length; index++) {
     const action = scenario[index]
 
     if (action.cmd === 'attack' && action.from === 'player') {
+      const playerIndex = action.num
       for (const damageList of Object.values(action.damage)) {
         for (const damage of damageList) {
           if (Number(damage.value)) {
             battleInfo.value.normalAttackInfo.hit++
             battleInfo.value.normalAttackInfo.total += Number(damage.value)
+            battleInfo.value.normalAttackInfo.attack += Number(damage.value)
+            // 记录角色伤害
+            if (playerIndex !== undefined) {
+              const currentDamage = playerDamageMap.get(playerIndex) || 0
+              playerDamageMap.set(playerIndex, currentDamage + Number(damage.value))
+              
+              const currentAttackDamage = playerAttackDamageMap.get(playerIndex) || 0
+              playerAttackDamageMap.set(playerIndex, currentAttackDamage + Number(damage.value))
+            }
           }
         }
       }
@@ -192,45 +207,147 @@ function handleNormalAttackJson(data: AttackResultJson) {
       if (!action.list)
         continue
 
+      const playerIndex = action.num
       battleInfo.value.normalAttackInfo.chain++
       const _action = action as unknown as SpecialScenario
       battleInfo.value.normalAttackInfo.hit += _action.total?.filter(item => item.split[0] !== '0').length ?? 0
       for (let i = 0; i < _action.list.length || 0; i++) {
         const detail = _action.list[i]
         for (let j = 0; j < detail.damage.length; j++) {
-          battleInfo.value.normalAttackInfo.total += Number(detail.damage[j].value)
-          battleInfo.value.normalAttackInfo.special += Number(detail.damage[j].value)
+          const damageValue = Number(detail.damage[j].value)
+          battleInfo.value.normalAttackInfo.total += damageValue
+          battleInfo.value.normalAttackInfo.special += damageValue
+          // 记录角色伤害
+          if (playerIndex !== undefined) {
+            const currentDamage = playerDamageMap.get(playerIndex) || 0
+            playerDamageMap.set(playerIndex, currentDamage + damageValue)
+            
+            const currentSpecialDamage = playerSpecialDamageMap.get(playerIndex) || 0
+            playerSpecialDamageMap.set(playerIndex, currentSpecialDamage + damageValue)
+          }
         }
       }
     }
 
     if (action.cmd === 'damage' && action.to === 'boss') {
+      // 查找对应的角色
+      let playerIndex = -1
+      for (let i = 1; i <= 4; i++) {
+        const preAction = scenario[index - i]
+        if (!preAction) break
+        if (preAction.cmd === 'wait') break
+        if (['special', 'special_npc', 'ability'].includes(preAction.cmd) && preAction.to !== 'boss') {
+          playerIndex = preAction.num
+          break
+        }
+      }
+      
       const _action = action as unknown as DamageScenario
       for (let i = 0; i < _action.list.length || 0; i++) {
         if (Number(_action.list[i].value)) {
+          const damageValue = Number(_action.list[i].value)
           battleInfo.value.normalAttackInfo.hit++
-          battleInfo.value.normalAttackInfo.total += Number(_action.list[i].value)
-          if (isAbilityDamageAction(index, scenario))
-            battleInfo.value.normalAttackInfo.ability += Number(_action.list[i].value)
+          battleInfo.value.normalAttackInfo.total += damageValue
+          if (isAbilityDamageAction(index, scenario)) {
+            battleInfo.value.normalAttackInfo.ability += damageValue
+            // 记录角色技伤
+            if (playerIndex !== -1) {
+              const currentAbilityDamage = playerAbilityDamageMap.get(playerIndex) || 0
+              playerAbilityDamageMap.set(playerIndex, currentAbilityDamage + damageValue)
+            }
+          }
+          // 记录角色伤害
+          if (playerIndex !== -1) {
+            const currentDamage = playerDamageMap.get(playerIndex) || 0
+            playerDamageMap.set(playerIndex, currentDamage + damageValue)
+          }
         }
       }
     }
 
     if (action.cmd === 'loop_damage' && action.to === 'boss') {
+      // 查找对应的角色
+      let playerIndex = -1
+      for (let i = 1; i <= 4; i++) {
+        const preAction = scenario[index - i]
+        if (!preAction) break
+        if (preAction.cmd === 'wait') break
+        if (['special', 'special_npc', 'ability'].includes(preAction.cmd) && preAction.to !== 'boss') {
+          playerIndex = preAction.num
+          break
+        }
+      }
+      
       const _action = action as unknown as LoopDamageScenario
       for (let i = 0; i < _action.list.length; i++) {
         for (let j = 0; j < _action.list[i].length; j++) {
           if (Number(_action.list[i][j].value)) {
+            const damageValue = Number(_action.list[i][j].value)
             battleInfo.value.normalAttackInfo.hit++
-            battleInfo.value.normalAttackInfo.total += Number(_action.list[i][j].value)
-            if (isAbilityDamageAction(index, scenario))
-              battleInfo.value.normalAttackInfo.ability += Number(_action.list[i][j].value)
+            battleInfo.value.normalAttackInfo.total += damageValue
+            if (isAbilityDamageAction(index, scenario)) {
+              battleInfo.value.normalAttackInfo.ability += damageValue
+              // 记录角色技伤
+              if (playerIndex !== -1) {
+                const currentAbilityDamage = playerAbilityDamageMap.get(playerIndex) || 0
+                playerAbilityDamageMap.set(playerIndex, currentAbilityDamage + damageValue)
+              }
+            }
+            // 记录角色伤害
+            if (playerIndex !== -1) {
+              const currentDamage = playerDamageMap.get(playerIndex) || 0
+              playerDamageMap.set(playerIndex, currentDamage + damageValue)
+            }
           }
         }
       }
     }
     if (action.cmd === 'turn' && action.mode === 'boss')
       break
+  }
+  
+  // 计算角色总伤害分布
+  if (battleInfo.value.normalAttackInfo.total > 0) {
+    battleInfo.value.normalAttackInfo.playerDamage = Array.from(playerDamageMap.entries())
+      .map(([playerIndex, damage]) => ({
+        playerIndex,
+        damage,
+        percentage: (damage / battleInfo.value.normalAttackInfo.total * 100).toFixed(1)
+      }))
+      .filter(item => item.damage > 0)
+  }
+  
+  // 计算角色技伤分布
+  if (battleInfo.value.normalAttackInfo.ability > 0) {
+    battleInfo.value.normalAttackInfo.playerAbilityDamage = Array.from(playerAbilityDamageMap.entries())
+      .map(([playerIndex, damage]) => ({
+        playerIndex,
+        damage,
+        percentage: (damage / battleInfo.value.normalAttackInfo.ability * 100).toFixed(1)
+      }))
+      .filter(item => item.damage > 0)
+  }
+  
+  // 计算角色奥伤分布
+  if (battleInfo.value.normalAttackInfo.special > 0) {
+    battleInfo.value.normalAttackInfo.playerSpecialDamage = Array.from(playerSpecialDamageMap.entries())
+      .map(([playerIndex, damage]) => ({
+        playerIndex,
+        damage,
+        percentage: (damage / battleInfo.value.normalAttackInfo.special * 100).toFixed(1)
+      }))
+      .filter(item => item.damage > 0)
+  }
+  
+  // 计算角色平A伤害分布
+  if (battleInfo.value.normalAttackInfo.attack > 0) {
+    battleInfo.value.normalAttackInfo.playerAttackDamage = Array.from(playerAttackDamageMap.entries())
+      .map(([playerIndex, damage]) => ({
+        playerIndex,
+        damage,
+        percentage: (damage / battleInfo.value.normalAttackInfo.attack * 100).toFixed(1)
+      }))
+      .filter(item => item.damage > 0)
   }
 }
 

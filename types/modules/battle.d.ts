@@ -74,8 +74,29 @@ declare module 'battle' {
     hit: number
     ability: number
     special: number
+    attack: number
     total: number
     chain: number
+    playerDamage?: {
+      playerIndex: number
+      damage: number
+      percentage: number
+    }[]
+    playerAbilityDamage?: {
+      playerIndex: number
+      damage: number
+      percentage: number
+    }[]
+    playerSpecialDamage?: {
+      playerIndex: number
+      damage: number
+      percentage: number
+    }[]
+    playerAttackDamage?: {
+      playerIndex: number
+      damage: number
+      percentage: number
+    }[]
   }
 
   interface BattleExport {
