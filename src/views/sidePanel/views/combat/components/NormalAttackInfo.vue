@@ -2,6 +2,7 @@
 import type { NormalAttackInfo } from 'battle'
 import { computed } from 'vue'
 import { battleInfo, battleRecord } from '~/logic'
+import { getAssetImg } from '~/composables/useImage'
 
 const props = defineProps<{ normalAttackInfo: NormalAttackInfo }>()
 
