@@ -306,48 +306,51 @@ function handleNormalAttackJson(data: AttackResultJson) {
       break
   }
   
-  // 计算角色总伤害分布
-  if (battleInfo.value.normalAttackInfo.total > 0) {
-    battleInfo.value.normalAttackInfo.playerDamage = Array.from(playerDamageMap.entries())
-      .map(([playerIndex, damage]) => ({
-        playerIndex,
-        damage,
-        percentage: (damage / battleInfo.value.normalAttackInfo.total * 100).toFixed(1)
-      }))
-      .filter(item => item.damage > 0)
-  }
-  
-  // 计算角色技伤分布
-  if (battleInfo.value.normalAttackInfo.ability > 0) {
-    battleInfo.value.normalAttackInfo.playerAbilityDamage = Array.from(playerAbilityDamageMap.entries())
-      .map(([playerIndex, damage]) => ({
-        playerIndex,
-        damage,
-        percentage: (damage / battleInfo.value.normalAttackInfo.ability * 100).toFixed(1)
-      }))
-      .filter(item => item.damage > 0)
-  }
-  
-  // 计算角色奥伤分布
-  if (battleInfo.value.normalAttackInfo.special > 0) {
-    battleInfo.value.normalAttackInfo.playerSpecialDamage = Array.from(playerSpecialDamageMap.entries())
-      .map(([playerIndex, damage]) => ({
-        playerIndex,
-        damage,
-        percentage: (damage / battleInfo.value.normalAttackInfo.special * 100).toFixed(1)
-      }))
-      .filter(item => item.damage > 0)
-  }
-  
-  // 计算角色平A伤害分布
-  if (battleInfo.value.normalAttackInfo.attack > 0) {
-    battleInfo.value.normalAttackInfo.playerAttackDamage = Array.from(playerAttackDamageMap.entries())
-      .map(([playerIndex, damage]) => ({
-        playerIndex,
-        damage,
-        percentage: (damage / battleInfo.value.normalAttackInfo.attack * 100).toFixed(1)
-      }))
-      .filter(item => item.damage > 0)
+  const normalAttackInfo = battleInfo.value.normalAttackInfo
+  if (normalAttackInfo) {
+    // 计算角色总伤害分布
+    if (normalAttackInfo.total > 0) {
+      normalAttackInfo.playerDamage = Array.from(playerDamageMap.entries())
+        .map(([playerIndex, damage]) => ({
+          playerIndex,
+          damage,
+          percentage: Number((damage / normalAttackInfo.total * 100).toFixed(1))
+        }))
+        .filter(item => item.damage > 0)
+    }
+    
+    // 计算角色技伤分布
+    if (normalAttackInfo.ability > 0) {
+      normalAttackInfo.playerAbilityDamage = Array.from(playerAbilityDamageMap.entries())
+        .map(([playerIndex, damage]) => ({
+          playerIndex,
+          damage,
+          percentage: Number((damage / normalAttackInfo.ability * 100).toFixed(1))
+        }))
+        .filter(item => item.damage > 0)
+    }
+    
+    // 计算角色奥伤分布
+    if (normalAttackInfo.special > 0) {
+      normalAttackInfo.playerSpecialDamage = Array.from(playerSpecialDamageMap.entries())
+        .map(([playerIndex, damage]) => ({
+          playerIndex,
+          damage,
+          percentage: Number((damage / normalAttackInfo.special * 100).toFixed(1))
+        }))
+        .filter(item => item.damage > 0)
+    }
+    
+    // 计算角色平A伤害分布
+    if (normalAttackInfo.attack > 0) {
+      normalAttackInfo.playerAttackDamage = Array.from(playerAttackDamageMap.entries())
+        .map(([playerIndex, damage]) => ({
+          playerIndex,
+          damage,
+          percentage: Number((damage / normalAttackInfo.attack * 100).toFixed(1))
+        }))
+        .filter(item => item.damage > 0)
+    }
   }
 }
 
@@ -545,7 +548,7 @@ function recordRaidInfo(data: BattleStartJson) {
 
   battleInfo.value.mvpInfo = []
   battleInfo.value.chatList = []
-  battleInfo.value.normalAttackInfo = { hit: 0, ability: 0, special: 0, total: 0, chain: 0 }
+  battleInfo.value.normalAttackInfo = { hit: 0, ability: 0, special: 0, attack: 0, total: 0, chain: 0 }
   const formation = Object.values(data.ability).map(a => a.pos)
   const guard_status = Object.values(data.ability).map(a => ({ num: a.pos, is_guard_status: 0 }))
 
